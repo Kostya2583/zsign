@@ -9,6 +9,9 @@
 #include <math.h>
 #include <sys/stat.h>
 #include "base64.h"
+#include <charconv>
+#include <sstream>
+#include <iostream>
 
 #ifndef WIN32
 #define _atoi64(val) strtoll(val, NULL, 10)
@@ -379,55 +382,40 @@ bool JValue::asBool() const
 	return false;
 }
 
-string JValue::asString() const
-{
-	switch (m_eType)
-	{
-	case E_BOOL:
-		return m_Value.vBool ? "true" : "false";
-		break;
-	case E_INT:
-	{
-		char buf[256];
-		sprintf(buf, "%" PRId64, m_Value.vInt64);
-		return buf;
-	}
-	break;
-	case E_FLOAT:
-	{
-		char buf[256];
-		sprintf(buf, "%lf", m_Value.vFloat);
-		return buf;
-	}
-	break;
-	case E_ARRAY:
-		return "array";
-		break;
-	case E_OBJECT:
-		return "object";
-		break;
-	case E_STRING:
-		return (NULL == m_Value.vString) ? "" : m_Value.vString;
-		break;
-	case E_DATE:
-		return "date";
-		break;
-	case E_DATA:
-		return "data";
-		break;
-	default:
-		break;
-	}
-	return "";
+std::string JValue::asString() const{
+    switch (m_eType){
+        case E_BOOL:
+            return m_Value.vBool ? "true" : "false";
+            break;
+        case E_INT:
+            return std::to_string(m_Value.vInt64);
+            break;
+        case E_FLOAT:
+            return std::to_string(m_Value.vFloat);
+            break;
+        case E_ARRAY:
+            return "array";
+            break;
+        case E_OBJECT:
+            return "object";
+            break;
+        case E_STRING:
+            return (nullptr == m_Value.vString) ? "" : m_Value.vString;
+            break;
+        case E_DATE:
+            return "date";
+            break;
+        case E_DATA:
+            return "data";
+            break;
+        default:
+            break;
+    }
+    return "";
 }
 
-const char *JValue::asCString() const
-{
-	if (E_STRING == m_eType && NULL != m_Value.vString)
-	{
-		return m_Value.vString;
-	}
-	return "";
+const char *JValue::asCString() const{
+	return E_STRING == m_eType && NULL != m_Value.vString ? m_Value.vString : "";
 }
 
 size_t JValue::size() const
@@ -891,16 +879,11 @@ bool JValue::isDate() const
 	return (E_DATE == m_eType);
 }
 
-bool JValue::isDataString() const
-{
-	if (E_STRING == m_eType)
-	{
-		if (NULL != m_Value.vString)
-		{
-			if (strlen(m_Value.vString) >= 5)
-			{
-				if (0 == memcmp(m_Value.vString, "data:", 5))
-				{
+bool JValue::isDataString() const{
+	if (E_STRING == m_eType){
+		if (NULL != m_Value.vString){
+			if (strlen(m_Value.vString) >= 5){
+				if (0 == memcmp(m_Value.vString, "data:", 5)){
 					return true;
 				}
 			}
@@ -910,54 +893,34 @@ bool JValue::isDataString() const
 	return false;
 }
 
-bool JValue::isDateString() const
-{
-	if (E_STRING == m_eType)
-	{
-		if (NULL != m_Value.vString)
-		{
-			if (25 == strlen(m_Value.vString))
-			{
-				if (0 == memcmp(m_Value.vString, "date:", 5))
-				{
-					const char *pdate = m_Value.vString + 5;
-					if ('T' == pdate[10] && 'Z' == pdate[19])
-					{
-						return true;
-					}
-				}
-			}
+bool JValue::isDateString() const{
+	if (E_STRING == m_eType && m_Value.vString != NULL && 25 == strlen(m_Value.vString) && memcmp(m_Value.vString, "date:", 5) == 0){
+		const char *pdate = m_Value.vString + 5;
+		if('T' == pdate[10] && 'Z' == pdate[19]){
+			return true;
 		}
 	}
 
 	return false;
 }
 
-bool JValue::readPList(const string &strdoc, string *pstrerr /*= NULL*/)
-{
+bool JValue::readPList(const string &strdoc, string *pstrerr /*= NULL*/){
 	return readPList(strdoc.data(), strdoc.size(), pstrerr);
 }
 
-bool JValue::readPList(const char *pdoc, size_t len /*= 0*/, string *pstrerr /*= NULL*/)
-{
-	if (NULL == pdoc)
-	{
+bool JValue::readPList(const char *pdoc, size_t len /*= 0*/, string *pstrerr /*= NULL*/){
+	if(NULL == pdoc){
 		return false;
 	}
 
-	if (0 == len)
-	{
+	if(0 == len){
 		len = strlen(pdoc);
 	}
 
 	PReader reader;
 	bool bret = reader.parse(pdoc, len, *this);
-	if (!bret)
-	{
-		if (NULL != pstrerr)
-		{
-			reader.error(*pstrerr);
-		}
+	if (!bret && pstrerr != NULL){
+		reader.error(*pstrerr);
 	}
 
 	return bret;
@@ -1274,33 +1237,24 @@ bool JReader::readToken(Token &token)
 	return true;
 }
 
-void JReader::skipSpaces()
-{
-	while (m_pCur != m_pEnd)
-	{
+void JReader::skipSpaces(){
+	while(m_pCur != m_pEnd){
 		char c = *m_pCur;
-		if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
-		{
+		if(c == ' ' || c == '\t' || c == '\r' || c == '\n'){
 			m_pCur++;
-		}
-		else
-		{
+		}else{
 			break;
 		}
 	}
 }
 
-bool JReader::match(const char *pattern, int patternLength)
-{
-	if (m_pEnd - m_pCur < patternLength)
-	{
+bool JReader::match(const char *pattern, int patternLength){
+	if(m_pEnd - m_pCur < patternLength){
 		return false;
 	}
 	int index = patternLength;
-	while (index--)
-	{
-		if (m_pCur[index] != pattern[index])
-		{
+	while(index--){
+		if(m_pCur[index] != pattern[index]){
 			return false;
 		}
 	}
@@ -1308,27 +1262,19 @@ bool JReader::match(const char *pattern, int patternLength)
 	return true;
 }
 
-void JReader::skipComment()
-{
+void JReader::skipComment(){
 	char c = GetNextChar();
-	if (c == '*')
-	{
-		while (m_pCur != m_pEnd)
-		{
+	if (c == '*'){
+		while (m_pCur != m_pEnd){
 			char c = GetNextChar();
-			if (c == '*' && *m_pCur == '/')
-			{
+			if (c == '*' && *m_pCur == '/'){
 				break;
 			}
 		}
-	}
-	else if (c == '/')
-	{
-		while (m_pCur != m_pEnd)
-		{
+	}else if (c == '/'){
+		while (m_pCur != m_pEnd){
 			char c = GetNextChar();
-			if (c == '\r' || c == '\n')
-			{
+			if (c == '\r' || c == '\n'){
 				break;
 			}
 		}
@@ -1620,28 +1566,23 @@ char JReader::GetNextChar()
 	return (m_pCur == m_pEnd) ? 0 : *m_pCur++;
 }
 
-void JReader::error(string &strmsg) const
-{
-	strmsg = "";
-	int row = 1;
-	const char *pcur = m_pBeg;
-	const char *plast = m_pBeg;
-	while (pcur < m_pErr && pcur <= m_pEnd)
-	{
-		char c = *pcur++;
-		if (c == '\r' || c == '\n')
-		{
-			if (c == '\r' && *pcur == '\n')
-			{
-				pcur++;
-			}
-			row++;
-			plast = pcur;
-		}
-	}
-	char msg[64];
-	sprintf(msg, "Error: Line %d, Column %d, ", row, int(m_pErr - plast) + 1);
-	strmsg += msg + m_strErr + "\n";
+void JReader::error(std::string& strmsg) const{
+    strmsg = "";
+    int row = 1;
+    const char* pcur = m_pBeg;
+    const char* plast = m_pBeg;
+    while (pcur < m_pErr && pcur <= m_pEnd) {
+        char c = *pcur++;
+        if (c == '\r' || c == '\n') {
+            if (c == '\r' && *pcur == '\n') {
+                pcur++;
+            }
+            row++;
+            plast = pcur;
+        }
+    }
+    std::string msg = "Error: Line " + std::to_string(row) + ", Column " + std::to_string(static_cast<int>(m_pErr - plast) + 1) + ", ";
+    strmsg += msg + m_strErr + "\n";
 }
 
 // Class Writer
@@ -1875,54 +1816,44 @@ bool JWriter::isMultineArray(const JValue &jval)
 	return isMultiLine;
 }
 
-void JWriter::PushValue(const string &strval)
-{
-	if (!m_bAddChild)
-	{
+void JWriter::PushValue(const string &strval){
+	if (!m_bAddChild){
 		m_strDoc += strval;
-	}
-	else
-	{
+	}else{
 		m_childValues.push_back(strval);
 	}
 }
 
-string JWriter::v2s(int64_t val)
-{
-	char buf[32];
-	sprintf(buf, "%" PRId64, val);
-	return buf;
+std::string JWriter::v2s(int64_t val) {
+    return std::to_string(val);
 }
 
-string JWriter::v2s(double val)
-{
-	char buf[512];
-	sprintf(buf, "%g", val);
-	return buf;
+std::string JWriter::v2s(double val) {
+    return std::to_string(val);
 }
 
-string JWriter::d2s(time_t t)
-{
-	//t = (t > 0x7933F8EFF) ? (0x7933F8EFF - 1) : t;
+string JWriter::d2s(time_t t) {
+    // t = (t > 0x7933F8EFF) ? (0x7933F8EFF - 1) : t;
 
-	tm ft = {0};
+    tm ft = {0};
 
 #ifdef _WIN32
-	localtime_s(&ft, &t);
+    localtime_s(&ft, &t);
 #else
-	localtime_r(&t, &ft);
+    localtime_r(&t, &ft);
 #endif
 
-	ft.tm_year = (ft.tm_year < 0) ? 0 : ft.tm_year;
-	ft.tm_mon = (ft.tm_mon < 0) ? 0 : ft.tm_mon;
-	ft.tm_mday = (ft.tm_mday < 0) ? 0 : ft.tm_mday;
-	ft.tm_hour = (ft.tm_hour < 0) ? 0 : ft.tm_hour;
-	ft.tm_min = (ft.tm_min < 0) ? 0 : ft.tm_min;
-	ft.tm_sec = (ft.tm_sec < 0) ? 0 : ft.tm_sec;
+    ft.tm_year = (ft.tm_year < 0) ? 0 : ft.tm_year;
+    ft.tm_mon = (ft.tm_mon < 0) ? 0 : ft.tm_mon;
+    ft.tm_mday = (ft.tm_mday < 0) ? 0 : ft.tm_mday;
+    ft.tm_hour = (ft.tm_hour < 0) ? 0 : ft.tm_hour;
+    ft.tm_min = (ft.tm_min < 0) ? 0 : ft.tm_min;
+    ft.tm_sec = (ft.tm_sec < 0) ? 0 : ft.tm_sec;
 
-	char szDate[64] = {0};
-	sprintf(szDate, "%04d-%02d-%02dT%02d:%02d:%02dZ", ft.tm_year + 1900, ft.tm_mon + 1, ft.tm_mday, ft.tm_hour, ft.tm_min, ft.tm_sec);
-	return szDate;
+    char szDate[64];
+    snprintf(szDate, sizeof(szDate), "%04d-%02d-%02dT%02d:%02d:%02dZ", ft.tm_year + 1900, ft.tm_mon + 1, ft.tm_mday, ft.tm_hour, ft.tm_min, ft.tm_sec);
+
+    return std::string(szDate);
 }
 
 string JWriter::v2s(const char *pstr)
@@ -2480,28 +2411,25 @@ bool PReader::addError(const string &message, const char *ploc)
 	return false;
 }
 
-void PReader::error(string &strmsg) const
-{
-	strmsg = "";
-	int row = 1;
-	const char *pcur = m_pBeg;
-	const char *plast = m_pBeg;
-	while (pcur < m_pErr && pcur <= m_pEnd)
-	{
-		char c = *pcur++;
-		if (c == '\r' || c == '\n')
-		{
-			if (c == '\r' && *pcur == '\n')
-			{
-				pcur++;
-			}
-			row++;
-			plast = pcur;
-		}
-	}
-	char msg[64];
-	sprintf(msg, "Error: Line %d, Column %d, ", row, int(m_pErr - plast) + 1);
-	strmsg += msg + m_strErr + "\n";
+void PReader::error(string& strmsg) const {
+    strmsg = "";
+    int row = 1;
+    const char* pcur = m_pBeg;
+    const char* plast = m_pBeg;
+    while (pcur < m_pErr && pcur <= m_pEnd) {
+        char c = *pcur++;
+        if (c == '\r' || c == '\n') {
+            if (c == '\r' && *pcur == '\n') {
+                pcur++;
+            }
+            row++;
+            plast = pcur;
+        }
+    }
+    string rowStr = std::to_string(row);
+    string colStr = std::to_string(int(m_pErr - plast) + 1);
+    string errorMsg = "Error: Line " + rowStr + ", Column " + colStr + ", " + m_strErr + "\n";
+    strmsg += errorMsg;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2900,139 +2828,82 @@ void PWriter::FastWrite(const JValue &pval, string &strdoc)
 	strdoc += "</plist>";
 }
 
-void PWriter::FastWriteValue(const JValue &pval, string &strdoc, string &strindent)
-{
-	if (pval.isObject())
-	{
+void PWriter::FastWriteValue(const JValue &pval, string &strdoc, string &strindent){
+	if (pval.isObject()){
 		strdoc += strindent;
-		if (pval.isEmpty())
-		{
+		if (pval.isEmpty()){
 			strdoc += "<dict/>\n";
 			return;
 		}
 		strdoc += "<dict>\n";
 		vector<string> arrKeys;
-		if (pval.keys(arrKeys))
-		{
+		if (pval.keys(arrKeys)){
 			strindent.push_back('\t');
-			for (size_t i = 0; i < arrKeys.size(); i++)
-			{
-				if (!pval[arrKeys[i].c_str()].isNull())
-				{
+			for (size_t i = 0; i < arrKeys.size(); i++){
+				if (!pval[arrKeys[i].c_str()].isNull()){
 					string strkey = arrKeys[i];
 					XMLEscape(strkey);
-					strdoc += strindent;
-					strdoc += "<key>";
-					strdoc += strkey;
-					strdoc += "</key>\n";
+					strdoc += strindent + "<key>" + strkey + "</key>\n";
 					FastWriteValue(pval[arrKeys[i].c_str()], strdoc, strindent);
 				}
 			}
 			strindent.erase(strindent.end() - 1);
 		}
+		strdoc += strindent + "</dict>\n";
+	}else if(pval.isArray()){
 		strdoc += strindent;
-		strdoc += "</dict>\n";
-	}
-	else if (pval.isArray())
-	{
-		strdoc += strindent;
-		if (pval.isEmpty())
-		{
+		if (pval.isEmpty()){
 			strdoc += "<array/>\n";
 			return;
 		}
 		strdoc += "<array>\n";
 		strindent.push_back('\t');
-		for (size_t i = 0; i < pval.size(); i++)
-		{
+		for (size_t i = 0; i < pval.size(); i++){
 			FastWriteValue(pval[i], strdoc, strindent);
 		}
 		strindent.erase(strindent.end() - 1);
-		strdoc += strindent;
-		strdoc += "</array>\n";
-	}
-	else if (pval.isDate())
-	{
-		strdoc += strindent;
-		strdoc += "<date>";
-		strdoc += JWriter::d2s(pval.asDate());
-		strdoc += "</date>\n";
-	}
-	else if (pval.isData())
-	{
+		strdoc += strindent + "</array>\n";
+	}else if (pval.isDate()){
+		strdoc += strindent + "<date>" + JWriter::d2s(pval.asDate()) + "</date>\n";
+	}else if (pval.isData()){
 		ZBase64 b64;
 		string strdata = pval.asData();
+		strdoc += strindent + "<data>\n" + strindent + b64.Encode(strdata.data(), (int)strdata.size()) + "\n" + strindent + "</data>\n";
+	}else if (pval.isString()){
 		strdoc += strindent;
-		strdoc += "<data>\n";
-		strdoc += strindent;
-		strdoc += b64.Encode(strdata.data(), (int)strdata.size());
-		strdoc += "\n";
-		strdoc += strindent;
-		strdoc += "</data>\n";
-	}
-	else if (pval.isString())
-	{
-		strdoc += strindent;
-		if (pval.isDateString())
-		{
+		if (pval.isDateString()){
 			strdoc += "<date>";
 			strdoc += pval.asString().c_str() + 5;
 			strdoc += "</date>\n";
-		}
-		else if (pval.isDataString())
-		{
-			strdoc += "<data>\n";
-			strdoc += strindent;
+		}else if (pval.isDataString()){
+			strdoc += "<data>\n" + strindent;
 			strdoc += pval.asString().c_str() + 5;
-			strdoc += "\n";
-			strdoc += strindent;
-			strdoc += "</data>\n";
-		}
-		else
-		{
+			strdoc += "\n" + strindent + "</data>\n";
+		}else{
 			string strval = pval.asCString();
 			XMLEscape(strval);
-			strdoc += "<string>";
-			strdoc += strval;
-			strdoc += "</string>\n";
+			strdoc += "<string>" + strval + "</string>\n";
 		}
-	}
-	else if (pval.isBool())
-	{
+	}else if (pval.isBool()){
 		strdoc += strindent;
 		strdoc += (pval.asBool() ? "<true/>\n" : "<false/>\n");
-	}
-	else if (pval.isInt())
-	{
-		strdoc += strindent;
-		strdoc += "<integer>";
-		char temp[32] = {0};
-		sprintf(temp, "%" PRId64, pval.asInt64());
-		strdoc += temp;
-		strdoc += "</integer>\n";
-	}
-	else if (pval.isFloat())
-	{
-		strdoc += strindent;
-		strdoc += "<real>";
+	}else if (pval.isInt()){
+		strdoc += strindent + "<integer>" + std::to_string(pval.asInt64()) + "</integer>\n";
+	}else if (pval.isFloat()){
+		strdoc += strindent + "<real>";
 
 		double v = pval.asFloat();
-		if (numeric_limits<double>::infinity() == v)
-		{
+		if(numeric_limits<double>::infinity() == v){
 			strdoc += "+infinity";
-		}
-		else
-		{
-			char temp[32] = {0};
-			if (floor(v) == v)
-			{
-				sprintf(temp, "%" PRId64, (int64_t)v);
+		}else{
+			std::stringstream ss;
+			if (std::floor(v) == v) {
+				ss << static_cast<int64_t>(v);
+			} else {
+				ss.precision(15);
+				ss << std::fixed << v;
 			}
-			else
-			{
-				sprintf(temp, "%.15lf", v);
-			}
-			strdoc += temp;
+			strdoc += ss.str();
 		}
 
 		strdoc += "</real>\n";

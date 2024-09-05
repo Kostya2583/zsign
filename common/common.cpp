@@ -4,6 +4,9 @@
 #include <sys/stat.h>
 #include <inttypes.h>
 #include <openssl/sha.h>
+#include <sstream>
+#include <iomanip>
+#include <cstdint>
 
 #define PARSEVALIST(szFormatArgs, szArgs)                       \
 	ZBuffer buffer;                                             \
@@ -352,52 +355,36 @@ string GetFileSizeString(const char *szFile)
 	return FormatSize(GetFileSize(szFile), 1024);
 }
 
-string FormatSize(int64_t size, int64_t base)
-{
-	double fsize = 0;
-	char ret[64] = {0};
-	if (size > base * base * base * base)
-	{
-		fsize = (size * 1.0) / (base * base * base * base);
-		sprintf(ret, "%.2f TB", fsize);
-	}
-	else if (size > base * base * base)
-	{
-		fsize = (size * 1.0) / (base * base * base);
-		sprintf(ret, "%.2f GB", fsize);
-	}
-	else if (size > base * base)
-	{
-		fsize = (size * 1.0) / (base * base);
-		sprintf(ret, "%.2f MB", fsize);
-	}
-	else if (size > base)
-	{
-		fsize = (size * 1.0) / (base);
-		sprintf(ret, "%.2f KB", fsize);
-	}
-	else
-	{
-		sprintf(ret, "%" PRId64 " B", size);
-	}
-	return ret;
+std::string FormatSize(int64_t size, int64_t base){
+    double fsize = 0;
+    std::stringstream ss;
+    if(size > base * base * base * base){
+        fsize = static_cast<double>(size) / (base * base * base * base);
+        ss << std::fixed << std::setprecision(2) << fsize << " TB";
+    }else if(size > base * base * base){
+        fsize = static_cast<double>(size) / (base * base * base);
+        ss << std::fixed << std::setprecision(2) << fsize << " GB";
+    }else if(size > base * base){
+        fsize = static_cast<double>(size) / (base * base);
+        ss << std::fixed << std::setprecision(2) << fsize << " MB";
+    }else if(size > base){
+        fsize = static_cast<double>(size) / base;
+        ss << std::fixed << std::setprecision(2) << fsize << " KB";
+    }else{
+        ss << size << " B";
+    }
+    return ss.str();
 }
 
-bool IsPathSuffix(const string &strPath, const char *suffix)
-{
+bool IsPathSuffix(const string &strPath, const char *suffix){
 	size_t nPos = strPath.rfind(suffix);
-	if (string::npos != nPos)
-	{
-		if (nPos == (strPath.size() - strlen(suffix)))
-		{
+	if(string::npos != nPos && nPos == (strPath.size() - strlen(suffix))){
 			return true;
-		}
 	}
 	return false;
 }
 
-time_t GetUnixStamp()
-{
+time_t GetUnixStamp(){
 	time_t ustime = 0;
 	time(&ustime);
 	return ustime;
@@ -513,19 +500,17 @@ void StringSplit(const string &src, const string &split, vector<string> &dest)
 	}
 }
 
-bool SHA1Text(const string &strData, string &strOutput)
-{
-	string strSHASum;
-	SHASum(E_SHASUM_TYPE_1, strData, strSHASum);
+bool SHA1Text(const std::string& strData, std::string& strOutput){
+    std::string strSHASum;
+    SHASum(E_SHASUM_TYPE_1, strData, strSHASum);
 
-	strOutput.clear();
-	char buf[16] = {0};
-	for (size_t i = 0; i < strSHASum.size(); i++)
-	{
-		sprintf(buf, "%02x", (uint8_t)strSHASum[i]);
-		strOutput += buf;
-	}
-	return (!strOutput.empty());
+    strOutput.clear();
+    std::stringstream ss;
+    for(size_t i = 0; i < strSHASum.size(); i++){
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<uint8_t>(strSHASum[i]);
+    }
+    strOutput = ss.str();
+    return (!strOutput.empty());
 }
 
 void PrintSHASum(const char *prefix, const uint8_t *hash, uint32_t size, const char *suffix)
@@ -677,16 +662,14 @@ uint64_t ZTimer::Reset()
 	return m_uBeginTime;
 }
 
-uint64_t ZTimer::Print(const char *szFormatArgs, ...)
-{
+uint64_t ZTimer::Print(const char *szFormatArgs, ...){
 	PARSEVALIST(szFormatArgs, szFormat)
 	uint64_t uElapse = GetMicroSecond() - m_uBeginTime;
 	ZLog::PrintV("%s (%.03fs, %lluus)\n", szFormat, uElapse / 1000000.0, uElapse);
 	return Reset();
 }
 
-uint64_t ZTimer::PrintResult(bool bSuccess, const char *szFormatArgs, ...)
-{
+uint64_t ZTimer::PrintResult(bool bSuccess, const char *szFormatArgs, ...){
 	PARSEVALIST(szFormatArgs, szFormat)
 	uint64_t uElapse = GetMicroSecond() - m_uBeginTime;
 	ZLog::PrintResultV(bSuccess, "%s (%.03fs, %lluus)\n", szFormat, uElapse / 1000000.0, uElapse);
@@ -695,125 +678,103 @@ uint64_t ZTimer::PrintResult(bool bSuccess, const char *szFormatArgs, ...)
 
 int ZLog::g_nLogLevel = ZLog::E_INFO;
 
-void ZLog::SetLogLever(int nLogLevel)
-{
+void ZLog::SetLogLever(int nLogLevel){
 	g_nLogLevel = nLogLevel;
 }
 
-void ZLog::Print(int nLevel, const char *szLog)
-{
-	if (g_nLogLevel >= nLevel)
-	{
-		write(STDOUT_FILENO, szLog, strlen(szLog));
+void ZLog::Print(int nLevel, const char *szLog){
+	if (g_nLogLevel >= nLevel){
+		write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	}
 }
 
-void ZLog::PrintV(int nLevel, const char *szFormatArgs, ...)
-{
-	if (g_nLogLevel >= nLevel)
-	{
+void ZLog::PrintV(int nLevel, const char *szFormatArgs, ...){
+	if (g_nLogLevel >= nLevel){
 		PARSEVALIST(szFormatArgs, szLog)
-		write(STDOUT_FILENO, szLog, strlen(szLog));
+		write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	}
 }
 
-bool ZLog::Error(const char *szLog)
-{
+bool ZLog::Error(const char *szLog){
 	write(STDOUT_FILENO, "\033[31m", 5);
-	write(STDOUT_FILENO, szLog, strlen(szLog));
+	write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	write(STDOUT_FILENO, "\033[0m", 4);
 	return false;
 }
 
-bool ZLog::ErrorV(const char *szFormatArgs, ...)
-{
+bool ZLog::ErrorV(const char *szFormatArgs, ...){
 	PARSEVALIST(szFormatArgs, szLog)
 	write(STDOUT_FILENO, "\033[31m", 5);
-	write(STDOUT_FILENO, szLog, strlen(szLog));
+	write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	write(STDOUT_FILENO, "\033[0m", 4);
 	return false;
 }
 
-bool ZLog::Success(const char *szLog)
-{
+bool ZLog::Success(const char *szLog){
 	write(STDOUT_FILENO, "\033[32m", 5);
-	write(STDOUT_FILENO, szLog, strlen(szLog));
+	write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	write(STDOUT_FILENO, "\033[0m", 4);
 	return true;
 }
 
-bool ZLog::SuccessV(const char *szFormatArgs, ...)
-{
+bool ZLog::SuccessV(const char *szFormatArgs, ...){
 	PARSEVALIST(szFormatArgs, szLog)
 	write(STDOUT_FILENO, "\033[32m", 5);
-	write(STDOUT_FILENO, szLog, strlen(szLog));
+	write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	write(STDOUT_FILENO, "\033[0m", 4);
 	return true;
 }
 
-bool ZLog::PrintResult(bool bSuccess, const char *szLog)
-{
+bool ZLog::PrintResult(bool bSuccess, const char *szLog){
 	return bSuccess ? Success(szLog) : Error(szLog);
 }
 
-bool ZLog::PrintResultV(bool bSuccess, const char *szFormatArgs, ...)
-{
+bool ZLog::PrintResultV(bool bSuccess, const char *szFormatArgs, ...){
 	PARSEVALIST(szFormatArgs, szLog)
 	return bSuccess ? Success(szLog) : Error(szLog);
 }
 
-bool ZLog::Warn(const char *szLog)
-{
+bool ZLog::Warn(const char *szLog){
 	write(STDOUT_FILENO, "\033[33m", 5);
-	write(STDOUT_FILENO, szLog, strlen(szLog));
+	write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	write(STDOUT_FILENO, "\033[0m", 4);
 	return false;
 }
 
-bool ZLog::WarnV(const char *szFormatArgs, ...)
-{
+bool ZLog::WarnV(const char *szFormatArgs, ...){
 	PARSEVALIST(szFormatArgs, szLog)
 	write(STDOUT_FILENO, "\033[33m", 5);
-	write(STDOUT_FILENO, szLog, strlen(szLog));
+	write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	write(STDOUT_FILENO, "\033[0m", 4);
 	return false;
 }
 
-void ZLog::Print(const char *szLog)
-{
-	if (g_nLogLevel >= E_INFO)
-	{
-		write(STDOUT_FILENO, szLog, strlen(szLog));
+void ZLog::Print(const char *szLog){
+	if (g_nLogLevel >= E_INFO){
+		write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	}
 }
 
-void ZLog::PrintV(const char *szFormatArgs, ...)
-{
-	if (g_nLogLevel >= E_INFO)
-	{
+void ZLog::PrintV(const char *szFormatArgs, ...){
+	if (g_nLogLevel >= E_INFO){
 		PARSEVALIST(szFormatArgs, szLog)
-		write(STDOUT_FILENO, szLog, strlen(szLog));
+		write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	}
 }
 
-void ZLog::Debug(const char *szLog)
-{
-	if (g_nLogLevel >= E_DEBUG)
-	{
-		write(STDOUT_FILENO, szLog, strlen(szLog));
+void ZLog::Debug(const char *szLog){
+	if (g_nLogLevel >= E_DEBUG){
+		write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	}
 }
 
-void ZLog::DebugV(const char *szFormatArgs, ...)
-{
-	if (g_nLogLevel >= E_DEBUG)
-	{
+void ZLog::DebugV(const char *szFormatArgs, ...){
+	if (g_nLogLevel >= E_DEBUG){
 		PARSEVALIST(szFormatArgs, szLog)
-		write(STDOUT_FILENO, szLog, strlen(szLog));
+		write(STDOUT_FILENO, (std::string(">>> ") + szLog).c_str(), strlen(szLog) + 4);
 	}
 }
 
-bool ZLog::IsDebug()
-{
+bool ZLog::IsDebug(){
 	return (E_DEBUG == g_nLogLevel);
 }
