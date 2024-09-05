@@ -6,172 +6,180 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <getopt.h>
-#include <iostream>
 
-struct Option {
-	const char* name;
-	int argument;
-	int value;
-	const char* description;
-	const char* defaultValue;  // Added field for default value
-};
+const struct option options[] = {
+	{"debug", no_argument, NULL, 'd'},
+	{"force", no_argument, NULL, 'f'},
+	{"verbose", no_argument, NULL, 'v'},
+	{"cert", required_argument, NULL, 'c'},
+	{"pkey", required_argument, NULL, 'k'},
+	{"prov", required_argument, NULL, 'm'},
+	{"password", required_argument, NULL, 'p'},
+	{"bundle_id", required_argument, NULL, 'b'},
+	{"bundle_name", required_argument, NULL, 'n'},
+	{"bundle_version", required_argument, NULL, 'r'},
+	{"entitlements", required_argument, NULL, 'e'},
+	{"output", required_argument, NULL, 'o'},
+	{"zip_level", required_argument, NULL, 'z'},
+	{"dylib", required_argument, NULL, 'l'},
+	{"weak", no_argument, NULL, 'w'},
+	{"install", no_argument, NULL, 'i'},
+	{"quiet", no_argument, NULL, 'q'},
+	{"help", no_argument, NULL, 'h'},
+	{}};
 
-const Option options[] = {
-	{"debug", no_argument, 'd', "Generate debug output files. (.zsign_debug folder)", ""},
-	{"force", no_argument, 'f', "Force sign without cache when signing folder.", ""},
-	{"verbose", no_argument, 'v', "Enable verbose output.", ""},
-	{"cert", required_argument, 'c', "Path to certificate file. (PEM or DER format)", ""},
-	{"pkey", required_argument, 'k', "Path to private key or p12 file. (PEM or DER format)", ""},
-	{"prov", required_argument, 'm', "Path to mobile provisioning profile.", ""},
-	{"password", required_argument, 'p', "Password for private key or p12 file.", ""},
-	{"bundle_id", required_argument, 'b', "New bundle id to change.", ""},
-	{"bundle_name", required_argument, 'n', "New bundle name to change.", ""},
-	{"bundle_version", required_argument, 'r', "New bundle version to change.", ""},
-	{"entitlements", required_argument, 'e', "New entitlements to change.", ""},
-	{"output", required_argument, 'o', "Path to output ipa file.", ""},
-	{"zip_level", required_argument, 'z', "Compressed level when outputting the ipa file. (0-9)", "0"},
-	{"dylib", required_argument, 'l', "Path to inject dylib file.", ""},
-	{"weak", no_argument, 'w', "Inject dylib as LC_LOAD_WEAK_DYLIB.", ""},
-	{"install", no_argument, 'i', "Install ipa file using ideviceinstaller command for testing.", ""},
-	{"remove_mobileprovision", no_argument, 'j', "Remove Mobileprovision.", ""},
-	{"quiet", no_argument, 'q', "Quiet operation.", ""},
-	{"help", no_argument, 'h', "Display help (this message).", ""},
-	{}
-};
+int usage()
+{
+	ZLog::Print("Usage: zsign [-options] [-k privkey.pem] [-m dev.prov] [-o output.ipa] file|folder\n");
+	ZLog::Print("options:\n");
+	ZLog::Print("-k, --pkey\t\tPath to private key or p12 file. (PEM or DER format)\n");
+	ZLog::Print("-m, --prov\t\tPath to mobile provisioning profile.\n");
+	ZLog::Print("-c, --cert\t\tPath to certificate file. (PEM or DER format)\n");
+	ZLog::Print("-d, --debug\t\tGenerate debug output files. (.zsign_debug folder)\n");
+	ZLog::Print("-f, --force\t\tForce sign without cache when signing folder.\n");
+	ZLog::Print("-o, --output\t\tPath to output ipa file.\n");
+	ZLog::Print("-p, --password\t\tPassword for private key or p12 file.\n");
+	ZLog::Print("-b, --bundle_id\t\tNew bundle id to change.\n");
+	ZLog::Print("-n, --bundle_name\tNew bundle name to change.\n");
+	ZLog::Print("-r, --bundle_version\tNew bundle version to change.\n");
+	ZLog::Print("-e, --entitlements\tNew entitlements to change.\n");
+	ZLog::Print("-z, --zip_level\t\tCompressed level when output the ipa file. (0-9)\n");
+	ZLog::Print("-l, --dylib\t\tPath to inject dylib file.\n");
+	ZLog::Print("-w, --weak\t\tInject dylib as LC_LOAD_WEAK_DYLIB.\n");
+	ZLog::Print("-i, --install\t\tInstall ipa file using ideviceinstaller command for test.\n");
+	ZLog::Print("-q, --quiet\t\tQuiet operation.\n");
+	ZLog::Print("-v, --version\t\tShows version.\n");
+	ZLog::Print("-h, --help\t\tShows help (this message).\n");
 
-int usage() {
-	std::cout << "Usage: zsign [-options] [-k privkey.pem] [-m dev.prov] [-o output.ipa] file|folder" << std::endl;
-	std::cout << "options:" << std::endl;
-	for (const Option* opt = options; opt->name; opt++) {
-		std::cout << "-" << static_cast<char>(opt->value) << ", --" << opt->name << "\t\t\t\t" << opt->description;
-		if (opt->defaultValue[0] != '\0') {
-			std::cout << " (default: " << opt->defaultValue << ")";
-		}
-		std::cout << std::endl;
-	}
 	return -1;
 }
 
-struct Arguments {
-	bool debug;
-	bool force;
-	bool verbose;
-	bool install;
-	bool weakInject;
-	bool removeMobileprovision;
-	uint32_t zipLevel;
-	std::string certFile;
-	std::string pkeyFile;
-	std::string provFile;
-	std::string password;
-	std::string bundleId;
-	std::string bundleVersion;
-	std::string dyLibFile;
-	std::string outputFile;
-	std::string displayName;
+int main(int argc, char *argv[])
+{
+	ZTimer gtimer;
 
-	Arguments():
-		debug(false),
-		force(false),
-		verbose(false),
-		install(false),
-		weakInject(false),
-		removeMobileprovision(false),
-		zipLevel(0)
-	{}
-};
+	bool bForce = false;
+	bool bInstall = false;
+	bool bWeakInject = false;
+	uint32_t uZipLevel = 0;
 
-Arguments parseArguments(int argc, char* argv[]) {
-	Arguments args;
+	string strCertFile;
+	string strPKeyFile;
+	string strProvFile;
+	string strPassword;
+	string strBundleId;
+	string strBundleVersion;
+	string strDyLibFile;
+	string strOutputFile;
+	string strDisplayName;
+	string strEntitlementsFile;
+
 	int opt = 0;
 	int argslot = -1;
-	
-	// Construct short_options string dynamically
-	std::string short_options;
-	struct option long_options[sizeof(options) / sizeof(Option)];
-	
-	for (size_t i = 0; i < sizeof(options) / sizeof(Option); i++) {
-		long_options[i].name = options[i].name;
-		long_options[i].has_arg = options[i].argument;
-		long_options[i].val = options[i].value;
-
-		// Add to the short_options string
-		short_options.push_back(static_cast<char>(options[i].value));
-		if (options[i].argument == required_argument) {
-			short_options.push_back(':');
+	while (-1 != (opt = getopt_long(argc, argv, "dfvhc:k:m:o:ip:e:b:n:z:ql:w", options, &argslot)))
+	{
+		switch (opt)
+		{
+		case 'd':
+			ZLog::SetLogLever(ZLog::E_DEBUG);
+			break;
+		case 'f':
+			bForce = true;
+			break;
+		case 'c':
+			strCertFile = optarg;
+			break;
+		case 'k':
+			strPKeyFile = optarg;
+			break;
+		case 'm':
+			strProvFile = optarg;
+			break;
+		case 'p':
+			strPassword = optarg;
+			break;
+		case 'b':
+			strBundleId = optarg;
+			break;
+		case 'r':
+			strBundleVersion = optarg;
+			break;
+		case 'n':
+			strDisplayName = optarg;
+			break;
+		case 'e':
+			strEntitlementsFile = optarg;
+			break;
+		case 'l':
+			strDyLibFile = optarg;
+			break;
+		case 'i':
+			bInstall = true;
+			break;
+		case 'o':
+			strOutputFile = GetCanonicalizePath(optarg);
+			break;
+		case 'z':
+			uZipLevel = atoi(optarg);
+			break;
+		case 'w':
+			bWeakInject = true;
+			break;
+		case 'q':
+			ZLog::SetLogLever(ZLog::E_NONE);
+			break;
+		case 'v':
+		{
+			printf("version: 0.5\n");
+			return 0;
 		}
+		break;
+		case 'h':
+		case '?':
+			return usage();
+			break;
+		}
+
+		ZLog::DebugV(">>> Option:\t-%c, %s\n", opt, optarg);
 	}
 
-	while (-1 != (opt = getopt_long(argc, argv, short_options.c_str(), long_options, &argslot))) {
-		// for (size_t i = 0; i < sizeof(options) / sizeof(Option); i++) {
-			if (opt == 'c') args.certFile = optarg;
-			else if (opt == 'k') args.pkeyFile = optarg;
-			else if (opt == 'm') args.provFile = optarg;
-			else if (opt == 'p') args.password = optarg;
-			else if (opt == 'b') args.bundleId = optarg;
-			else if (opt == 'r') args.bundleVersion = optarg;
-			else if (opt == 'l') args.dyLibFile = optarg;
-			else if (opt == 'o') args.outputFile = GetCanonicalizePath(optarg);
-			else if (opt == 'z') args.zipLevel = atoi(optarg);
-			else if (opt == 'd') args.debug = true;
-			else if (opt == 'f') args.force = true;
-			else if (opt == 'v') args.verbose = true;
-			else if (opt == 'i') args.install = true;
-			else if (opt == 'w') args.weakInject = true;
-			else if (opt == 'j') args.removeMobileprovision = true;
-			else if (opt == 'h' || opt == '?') {
-				usage(); 
-				exit(0);
-			}
-		// }
-		
-		ZLog::DebugV("Option:\t-%c, %s\n", opt, optarg);
+	if (optind >= argc)
+	{
+		return usage();
 	}
 
-	if (optind >= argc) {
-		usage();
-		exit(0);
-	}
-
-	return args;
-}
-
-int main(int argc, char* argv[]) {
-	ZTimer gtimer;
-	Arguments args = parseArguments(argc, argv);
-
-	if (args.debug) {
-		ZLog::SetLogLever(ZLog::E_DEBUG);
-	}
-
-	if (args.verbose) {
-		ZLog::SetLogLever(ZLog::E_NONE);
-	}
-
-	if (ZLog::IsDebug()) {
+	if (ZLog::IsDebug())
+	{
 		CreateFolder("./.zsign_debug");
-		for (int i = optind; i < argc; i++) {
-			ZLog::DebugV("Argument:\t%s\n", argv[i]);
+		for (int i = optind; i < argc; i++)
+		{
+			ZLog::DebugV(">>> Argument:\t%s\n", argv[i]);
 		}
 	}
 
-	std::string filePath = GetCanonicalizePath(argv[optind]);
-	if (!IsFileExists(filePath.c_str())) {
-		ZLog::ErrorV("Invalid Path! %s\n", filePath.c_str());
+	string strPath = GetCanonicalizePath(argv[optind]);
+	if (!IsFileExists(strPath.c_str()))
+	{
+		ZLog::ErrorV(">>> Invalid Path! %s\n", strPath.c_str());
 		return -1;
 	}
 
-	bool isZipFile = false;
-	if (!IsFolder(filePath.c_str())) {
-		isZipFile = IsZipFile(filePath.c_str());
-		if (!isZipFile) {
+	bool bZipFile = false;
+	if (!IsFolder(strPath.c_str()))
+	{
+		bZipFile = IsZipFile(strPath.c_str());
+		if (!bZipFile)
+		{ //macho file
 			ZMachO macho;
-			if (macho.Init(filePath.c_str())) {
-				if (!args.dyLibFile.empty()) {
-					bool create = false;
-					macho.InjectDyLib(args.weakInject, args.dyLibFile.c_str(), create);
+			if (macho.Init(strPath.c_str()))
+			{
+				if (!strDyLibFile.empty())
+				{ //inject dylib
+					bool bCreate = false;
+					macho.InjectDyLib(bWeakInject, strDyLibFile.c_str(), bCreate);
 				}
-				else {
+				else
+				{
 					macho.PrintInfo();
 				}
 				macho.Free();
@@ -182,81 +190,85 @@ int main(int argc, char* argv[]) {
 
 	ZTimer timer;
 	ZSignAsset zSignAsset;
-	if (!zSignAsset.Init(args.certFile, args.pkeyFile, args.provFile, args.displayName, args.password)) {
+	if (!zSignAsset.Init(strCertFile, strPKeyFile, strProvFile, strEntitlementsFile, strPassword))
+	{
 		return -1;
 	}
 
-	bool enableCache = true;
-	std::string folderPath = filePath;
-	if (isZipFile) {
-		args.force = true;
-		enableCache = false;
-		StringFormat(folderPath, "/tmp/zsign_folder_%llu", timer.Reset());
-		ZLog::PrintV("Unzip:\t%s (%s) -> %s ... \n", filePath.c_str(), GetFileSizeString(filePath.c_str()).c_str(), folderPath.c_str());
-		RemoveFolder(folderPath.c_str());
-		if (!SystemExec("unzip -qq -d '%s' '%s'", folderPath.c_str(), filePath.c_str())) {
-			RemoveFolder(folderPath.c_str());
-			ZLog::ErrorV("Unzip Failed!\n");
+	bool bEnableCache = true;
+	string strFolder = strPath;
+	if (bZipFile)
+	{ //ipa file
+		bForce = true;
+		bEnableCache = false;
+		StringFormat(strFolder, "/tmp/zsign_folder_%llu", timer.Reset());
+		ZLog::PrintV(">>> Unzip:\t%s (%s) -> %s ... \n", strPath.c_str(), GetFileSizeString(strPath.c_str()).c_str(), strFolder.c_str());
+		RemoveFolder(strFolder.c_str());
+		if (!SystemExec("unzip -qq -d '%s' '%s'", strFolder.c_str(), strPath.c_str()))
+		{
+			RemoveFolder(strFolder.c_str());
+			ZLog::ErrorV(">>> Unzip Failed!\n");
 			return -1;
 		}
-		timer.PrintResult(true, "Unzip OK!");
+		timer.PrintResult(true, ">>> Unzip OK!");
 	}
 
 	timer.Reset();
 	ZAppBundle bundle;
-	bool success = bundle.SignFolder(&zSignAsset, folderPath, args.bundleId, args.bundleVersion, args.displayName, args.dyLibFile, args.force, args.weakInject, enableCache, args.removeMobileprovision);
-	if(success){
-		timer.PrintResult(success, "Signed");
-	}else{
-		timer.PrintResult(success, "Failed!");
-		return -1;
+	bool bRet = bundle.SignFolder(&zSignAsset, strFolder, strBundleId, strBundleVersion, strDisplayName, strDyLibFile, bForce, bWeakInject, bEnableCache);
+	timer.PrintResult(bRet, ">>> Signed %s!", bRet ? "OK" : "Failed");
+
+	if (bInstall && strOutputFile.empty())
+	{
+		StringFormat(strOutputFile, "/tmp/zsign_temp_%llu.ipa", GetMicroSecond());
 	}
 
-	if (args.install && args.outputFile.empty()) {
-		StringFormat(args.outputFile, "/tmp/zsign_temp_%llu.ipa", GetMicroSecond());
-	}
-
-	if (!args.outputFile.empty()) {
+	if (!strOutputFile.empty())
+	{
 		timer.Reset();
 		size_t pos = bundle.m_strAppFolder.rfind("/Payload");
-		if (string::npos == pos) {
-		    ZLog::Error("Can't Find Payload Directory!\n");
-		    return -1;
+		if (string::npos == pos)
+		{
+			ZLog::Error(">>> Can't Find Payload Directory!\n");
+			return -1;
 		}
-	
-		ZLog::PrintV(">>> Archiving: \t%s ... \n", args.outputFile.c_str());
+
+		ZLog::PrintV(">>> Archiving: \t%s ... \n", strOutputFile.c_str());
 		string strBaseFolder = bundle.m_strAppFolder.substr(0, pos);
 		char szOldFolder[PATH_MAX] = {0};
 		if (NULL != getcwd(szOldFolder, PATH_MAX))
 		{
 			if (0 == chdir(strBaseFolder.c_str()))
 			{
-				args.zipLevel = args.zipLevel > 9 ? 9 : args.zipLevel;
-				RemoveFile(args.outputFile.c_str());
-				SystemExec("7z a -tzip -mx=0 -r '%s' Payload", args.outputFile.c_str());
+				uZipLevel = uZipLevel > 9 ? 9 : uZipLevel;
+				RemoveFile(strOutputFile.c_str());
+				SystemExec("zip -q -%u -r '%s' Payload", uZipLevel, strOutputFile.c_str());
 				chdir(szOldFolder);
-				if (!IsFileExists(args.outputFile.c_str()))
+				if (!IsFileExists(strOutputFile.c_str()))
 				{
 					ZLog::Error(">>> Archive Failed!\n");
 					return -1;
 				}
 			}
 		}
-		timer.PrintResult(true, ">>> Archive OK! (%s)", GetFileSizeString(args.outputFile.c_str()).c_str());
-	    }
-
-	if (success && args.install) {
-		SystemExec("ideviceinstaller -i '%s'", args.outputFile.c_str());
+		timer.PrintResult(true, ">>> Archive OK! (%s)", GetFileSizeString(strOutputFile.c_str()).c_str());
 	}
 
-	if (0 == args.outputFile.find("/tmp/zsign_tmp_")) {
-		RemoveFile(args.outputFile.c_str());
+	if (bRet && bInstall)
+	{
+		SystemExec("ideviceinstaller -i '%s'", strOutputFile.c_str());
 	}
 
-	if (0 == folderPath.find("/tmp/zsign_folder_")) {
-		RemoveFolder(folderPath.c_str());
+	if (0 == strOutputFile.find("/tmp/zsign_tmp_"))
+	{
+		RemoveFile(strOutputFile.c_str());
 	}
 
-	gtimer.Print("Done.");
-	return success ? 0 : -1;
+	if (0 == strFolder.find("/tmp/zsign_folder_"))
+	{
+		RemoveFolder(strFolder.c_str());
+	}
+
+	gtimer.Print(">>> Done.");
+	return bRet ? 0 : -1;
 }
